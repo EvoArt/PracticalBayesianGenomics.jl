@@ -1,0 +1,15 @@
+Manifest.toml
+bench/Manifest.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/docs/build/
+
+/bench/
+/CLAUDE.md
+/HANDOVER.md
+/OPEN_QUESTIONS.md
+/FINDINGS_FROM_QUANTGEN.md
+/DEVLOG.md
+/LOG.md
+/docs/Manifest.toml

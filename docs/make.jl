@@ -14,7 +14,7 @@ makedocs(;
         canonical="https://EvoArt.github.io/PracticalBayesianGenomics.jl",
         repolink="https://github.com/EvoArt/PracticalBayesianGenomics.jl",
     ),
-    pages=["Home" => "index.md"],
+    pages=["Home" => "index.md", "Example: wheat" => "wheat.md"],
 )
 
 deploydocs(; repo="github.com/EvoArt/PracticalBayesianGenomics.jl")

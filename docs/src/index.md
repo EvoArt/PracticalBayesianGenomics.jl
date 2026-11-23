@@ -4,14 +4,13 @@ CurrentModule = PracticalBayesianGenomics
 
 # PracticalBayesianGenomics.jl
 
-PracticalBayesianGenomics.jl builds Bayesian genomic models on [PracticalBayes.jl](https://github.com/EvoArt/PracticalBayes.jl). Use `bayes_alphabet_model` for BayesB or BayesC marker regression, or `animal_model` for breeding values with pedigree or genomic relatedness. Each builder returns a model and a blocked Gibbs sampler compatible with AbstractMCMC.
+PracticalBayesianGenomics.jl builds Bayesian genomic models on [PracticalBayes.jl](https://github.com/EvoArt/PracticalBayes.jl). Use `bayes_alphabet_model` for BayesB or BayesCπ marker regression, or `animal_model` for breeding values with pedigree, genomic or single-step relatedness. Each builder returns a model and a fully conjugate blocked Gibbs sampler compatible with AbstractMCMC.
 
 Install the package and AbstractMCMC in the same Julia environment:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/EvoArt/PracticalBayesianGenomics.jl")
-Pkg.add("AbstractMCMC")
+Pkg.add(["PracticalBayesianGenomics", "AbstractMCMC"])
 ```
 
 ## Marker regression
@@ -32,7 +31,9 @@ draw.δ  # one inclusion indicator per marker
 draw.β  # marker effects
 ```
 
-For an analysis, discard warm-up draws and summarize many later draws. The posterior mean of each `δ` is its inclusion probability. `variant=:B` selects the BayesB model.
+For an analysis, discard warm-up draws and summarize many later draws. The posterior mean of each `δ` is its inclusion probability.
+
+`variant=:C` fits BayesCπ: every included marker shares one effect variance `σ²ᵦ`. `variant=:B` fits BayesB: marker `j` has its own effect variance `τ²ⱼ` with a scaled-inverse-χ² prior, so a few large effects can coexist with many small ones. BayesB draws contain the vector `τ²` in place of `σ²ᵦ`. The prior scale `S2b` matters more for BayesB, because each `τ²ⱼ` is informed by a single marker effect; see [`bayes_alphabet_model`](@ref) for the default.
 
 ## Animal model
 
@@ -50,7 +51,7 @@ phenotype = [1.2, 0.9, 1.5, 1.7, 2.1, 1.8]
 animal, animal_sampler = animal_model(phenotype, Xfixed, Z, rel)
 ```
 
-Use `genomic_relatedness_from_markers` to build a relatedness structure from a dosage matrix instead. Inspect the model and its priors before interpreting posterior estimates.
+Use `genomic_relatedness_from_markers` to build a relatedness structure from a dosage matrix, `genomic_relatedness` from an existing genomic relationship matrix, or `singlestep_relatedness` to combine a pedigree with genotypes on a subset of animals. Inspect the model and its priors before interpreting posterior estimates.
 
 ## API reference
 

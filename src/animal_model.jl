@@ -17,8 +17,7 @@ using Random
 #   * u        — the breeding values: exact multivariate-normal conditional,
 #                sampled by `AnimalKernel` (below).
 #   * β        — fixed effects: a flat / broad-normal prior, so its conditional
-#                is also Gaussian. Left on NUTS by default (small p; cheap), but
-#                can be given a conjugate kernel too.
+#                is also Gaussian, sampled exactly by `GaussianEffectKernel`.
 #   * σ²ᵤ, σ²ₑ — variance components: conjugate Inverse-Gamma, via
 #                `InvGammaVarKernel` (variance_kernels.jl).
 #
@@ -174,10 +173,10 @@ Build the animal model and a ready-to-use blocked-Gibbs sampler for it.
 - `β_scale`— prior variance for the flat fixed effects.
 - `(νu, Su2)`, `(νe, Se2)` — scaled-inv-χ² prior d.f./scale for σ²ᵤ / σ²ₑ.
 
-Returns `(model, spl)`. `spl` samples `u` with the exact MVN `AnimalKernel`,
-`σ²ᵤ`/`σ²ₑ` with conjugate `InvGammaVarKernel`s, and `β` with NUTS (cheap for
-small `p`). Sample with `AbstractMCMC.sample(model, spl, N)` /
-`AbstractMCMC.step`.
+Returns `(model, spl)`. `spl` is a fully conjugate blocked Gibbs sampler: `u`
+is drawn with the exact MVN `AnimalKernel`, `β` with the exact MVN
+`GaussianEffectKernel`, and `σ²ᵤ`/`σ²ₑ` with conjugate `InvGammaVarKernel`s.
+Sample with `AbstractMCMC.sample(model, spl, N)` / `AbstractMCMC.step`.
 
 The relatedness matrix `K` is written into the model body ONLY as the prior
 `u ~ MvNormal(0, σ²ᵤ K)` used for coverage/log-density bookkeeping; the actual

@@ -24,7 +24,6 @@ export RelatednessStructure,
 
 # Models
 export bayes_alphabet_model, BayesAlphabetKernel,
-    bayes_b_model, BayesBKernel,       # back-compat aliases
     animal_model, AnimalKernel
 
 end # module PracticalBayesianGenomics

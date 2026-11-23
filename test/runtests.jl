@@ -162,12 +162,101 @@ end
         @test cor(βacc ./ cnt, β_true) > 0.6
     end
 
-    @testset "Back-compat bayes_b_model returns a model" begin
-        rng = StableRNG(5)
-        n, p = 40, 10
-        X = randn(rng, n, p)
-        y = X * [1.0; zeros(p-1)] + 0.5 * randn(rng, n)
-        m = bayes_b_model(y, X)
-        @test m isa PracticalBayes.Model
+    @testset "BayesB: per-marker variances" begin
+        rng = StableRNG(11)
+        n, p = 300, 400
+        X = randn(rng, n, p); X .-= mean(X; dims=1)
+        true_idx = randperm(rng, p)[1:8]
+        β_true = zeros(p); β_true[true_idx] .= randn(rng, 8) .* 1.5
+        y = X * β_true + randn(rng, n)
+
+        model, spl = bayes_alphabet_model(y, X; variant=:B)
+        S2b = spl.blocks[1].kernel.S2b
+        t, state = AbstractMCMC.step(rng, model, spl)
+        for _ in 1:500; t, state = AbstractMCMC.step(rng, model, spl, state); end
+        δacc = zeros(p); βacc = zeros(p); cnt = 0
+        τ²_excluded = Float64[]
+        for _ in 1:1500
+            t, state = AbstractMCMC.step(rng, model, spl, state)
+            δacc .+= t.δ; βacc .+= t.β; cnt += 1
+            append!(τ²_excluded, t.τ²[t.δ .== 0])
+        end
+        @test length(t.τ²) == p
+        @test all(>(0), t.τ²)
+        @test !hasproperty(t, :σ²ᵦ)
+        @test all(t.β[t.δ .== 0] .== 0)
+        top = sortperm(δacc ./ cnt; rev=true)[1:8]
+        @test length(intersect(top, true_idx)) >= 6
+        @test cor(βacc ./ cnt, β_true) > 0.6
+        # An excluded marker's τ² is drawn from its prior.
+        prior = InverseGamma(3.0 / 2, 3.0 * S2b / 2)
+        @test median(τ²_excluded) ≈ median(prior) rtol = 0.05
+    end
+
+    @testset "BayesB and BayesCπ are different samplers" begin
+        rng0 = StableRNG(5)
+        n, p = 80, 30
+        X = randn(rng0, n, p); X .-= mean(X; dims=1)
+        y = X[:, 1] .* 2 .+ X[:, 2] .* 0.3 .+ randn(rng0, n)
+        mB, sB = bayes_alphabet_model(y, X; variant=:B, S2b=0.5)
+        mC, sC = bayes_alphabet_model(y, X; variant=:C, S2b=0.5)
+        function run(m, s)
+            rng = StableRNG(1)
+            t, st = AbstractMCMC.step(rng, m, s)
+            for _ in 1:50; t, st = AbstractMCMC.step(rng, m, s, st); end
+            t
+        end
+        tB, tC = run(mB, sB), run(mC, sC)
+        @test haskey(tB, :τ²) && !haskey(tB, :σ²ᵦ)
+        @test haskey(tC, :σ²ᵦ) && !haskey(tC, :τ²)
+        @test tB.β != tC.β
+        @test_throws ArgumentError bayes_alphabet_model(y, X; variant=:A)
+    end
+
+    @testset "genomic_relatedness on a VanRaden G with default arguments" begin
+        for (n, m) in ((30, 50), (60, 2000))
+            rng = StableRNG(n)
+            M = Float64.(rand(rng, 0:2, n, m))
+            pfreq = vec(mean(M; dims=1)) ./ 2
+            Zc = M .- 2 .* pfreq'
+            G = Zc * Zc' ./ (2 * sum(pfreq .* (1 .- pfreq)))
+            rel = genomic_relatedness(G)
+            Gb = 0.99 .* G + 0.01I
+            @test rel.kind == :genomic
+            @test rel.Kinv * Gb ≈ I atol = 1e-6
+            # The markers entry point builds the same G.
+            @test genomic_relatedness_from_markers(M).Kinv ≈ rel.Kinv rtol = 1e-8
+        end
+        @test_throws ArgumentError genomic_relatedness([1.0 2.0; 2.0 1.0]; blend=0.0)
+        @test_throws ArgumentError genomic_relatedness([1.0 0.0; 0.0 1.0]; blend=1.5)
+    end
+
+    @testset "singlestep_relatedness matches the dense H⁻¹ and H" begin
+        rng = StableRNG(13)
+        q = 40
+        sire = zeros(Int, q); dam = zeros(Int, q)
+        for i in 5:q
+            sire[i] = rand(rng, 1:i-1); dam[i] = rand(rng, 1:i-1)
+            while dam[i] == sire[i]; dam[i] = rand(rng, 1:i-1); end
+        end
+        A = dense_A(sire, dam)
+        g = sort(randperm(rng, q)[1:15])
+        M = Float64.(rand(rng, 0:2, length(g), 300))
+        pfreq = vec(mean(M; dims=1)) ./ 2
+        Zc = M .- 2 .* pfreq'
+        G = Zc * Zc' ./ (2 * sum(pfreq .* (1 .- pfreq)))
+
+        blend = 0.05
+        rel = singlestep_relatedness(sire, dam, G, g; blend=blend)
+        @test rel.kind == :singlestep
+        A22 = A[g, g]
+        Gb = (1 - blend) .* G .+ blend .* A22
+        Hinv_ref = inv(A)
+        Hinv_ref[g, g] .+= inv(Gb) .- inv(A22)
+        @test rel.Kinv ≈ Hinv_ref rtol = 1e-7
+        # Legarra et al. (2009): H = A + A₍·₂₎ A₂₂⁻¹ (G − A₂₂) A₂₂⁻¹ A₍₂·₎
+        Q = A[:, g] / A22
+        H = A .+ Q * (Gb .- A22) * Q'
+        @test inv(Symmetric(rel.Kinv)) ≈ H rtol = 1e-6
     end
 end

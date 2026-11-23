@@ -18,9 +18,9 @@ yield = Float64.(wheat["wheat.Y"][:, 1])     # environment 1, standardised
 size(markers)
 ```
 
-## BayesC
+## BayesCπ
 
-BayesC assumes most markers have no effect and estimates, for each marker, the
+BayesCπ assumes most markers have no effect and estimates, for each marker, the
 posterior probability that it is in the model. Centre the marker columns and the
 phenotype, then sample; `discard_initial` drops the warm-up draws.
 
@@ -37,5 +37,5 @@ top = sortperm(inclusion; rev=true)[1:8]
 Yield is highly polygenic: no marker stands out on its own, and the signal is spread
 thinly across the genome. That is why genomic BLUP, which assumes exactly this, predicts
 it well; see the
-[QuantitativeGenetics example](https://evoart.github.io/QuantitativeGenetics.jl/dev/wheat/)
+[AnimalModels example](https://evoart.github.io/AnimalModels.jl/dev/wheat/)
 for REML and held-out prediction on the same lines. `variant=:B` fits BayesB.

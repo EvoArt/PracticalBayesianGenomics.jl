@@ -155,28 +155,34 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    genomic_relatedness(G; blend=0.0, base=I) -> RelatednessStructure
+    genomic_relatedness(G; blend=0.01, base=I) -> RelatednessStructure
 
 Build a dense genomic relatedness structure from a genomic relationship matrix
-`G` (e.g. VanRaden's `G = MMᵀ / (2·Σpⱼ(1-pⱼ))` for centred marker matrix `M`).
-`G⁻¹` is formed once here via a single Cholesky and reused every sweep.
+`G` (e.g. VanRaden's `G = ZZᵀ / (2·Σpⱼ(1-pⱼ))` for the centred marker matrix
+`Z`). `G⁻¹` is formed once here via a single Cholesky and reused every sweep.
 
-`blend > 0` returns `(1-blend)·G + blend·base` before inverting — the standard
-regularisation that keeps `G` invertible when markers make it singular/near-
-singular (`base` defaults to the identity, i.e. a ridge toward independence; pass
-a pedigree `A` restricted to the genotyped animals to blend toward pedigree
-instead). Use a small `blend` (e.g. 0.01–0.05) on real data.
+`G` is replaced by `(1-blend)·G + blend·base` before inverting. A VanRaden `G`
+is always singular, because centring the marker columns removes one dimension,
+so it needs `blend > 0`; the default `0.01` matches
+[`genomic_relatedness_from_markers`](@ref). `base` defaults to the identity, a
+ridge toward independence; pass a pedigree `A` restricted to the genotyped
+animals to blend toward pedigree instead. `blend = 0` is accepted for a `G`
+that is already positive definite.
 """
-function genomic_relatedness(G::AbstractMatrix; blend::Real=0.0, base=I)
+function genomic_relatedness(G::AbstractMatrix; blend::Real=0.01, base=I)
     q = size(G, 1)
     size(G, 2) == q || throw(DimensionMismatch("G must be square"))
+    0 <= blend <= 1 || throw(ArgumentError("blend must be in [0, 1], got $blend"))
     if blend > 0
         base_mat = base isa UniformScaling ? Matrix{Float64}(base, q, q) : Matrix{Float64}(base)
         Gb = (1 - blend) .* Matrix{Float64}(G) .+ blend .* base_mat
     else
         Gb = Matrix{Float64}(G)
     end
-    Ginv = inv(cholesky(Symmetric(Gb)))
+    F = cholesky(Symmetric(Gb); check=false)
+    issuccess(F) || throw(ArgumentError(
+        "G (after blending with blend=$blend) is not positive definite; use a larger `blend`"))
+    Ginv = inv(F)
     return RelatednessStructure(Matrix(Ginv), :genomic)
 end
 

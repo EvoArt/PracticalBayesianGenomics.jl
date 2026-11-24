@@ -259,4 +259,32 @@ end
         H = A .+ Q * (Gb .- A22) * Q'
         @test inv(Symmetric(rel.Kinv)) ≈ H rtol = 1e-6
     end
+
+    @testset "constructor forms and fallbacks" begin
+        rng = StableRNG(14)
+        # markers already centred: G from the column-implied scaling
+        M = Float64.(rand(rng, 0:2, 30, 100))
+        Zc = M .- mean(M; dims=1)
+        relc = genomic_relatedness_from_markers(Zc; centered=true, blend=0.05)
+        @test relc.kind == :genomic && size(relc) == (30, 30)
+        # keyword and non-Float64 forms of the kernel constructors
+        f = c -> (1, 1.0)
+        kv = InvGammaVarKernel(:s, (2, 1); ss=f)
+        @test kv.prior === (2.0, 1.0) && kv.ss === f
+        ke = GaussianEffectKernel(:β, ones(1, 1), ones(1, 3), ones(2, 3), 4)
+        @test ke.prior_var === 4.0
+        # the residual-variance kernel computes y − Xβ itself before the marker
+        # kernel has stashed a residual
+        n, p = 20, 5
+        X = randn(rng, n, p); y = randn(rng, n)
+        for variant in (:C, :B)
+            model, spl = bayes_alphabet_model(y, X; variant=variant)
+            blk = only(b for b in spl.blocks if b.names == (:σ²ₑ,))
+            β = randn(rng, p); δ = [1, 0, 1, 1, 0]
+            c = PracticalBayes.ModelConditional(model, (; β, δ))
+            m, ss = blk.kernel.ss(c)
+            r = y .- X * (β .* δ)
+            @test m == n && ss ≈ dot(r, r)
+        end
+    end
 end
